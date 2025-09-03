@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>অনুকূূল : সবার জন্যে</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-1AithKdPGYBv3QnS8tP2GZKQ9s3f2nE4nHf+AAZ9Cmo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --brand:#0ea5e9; }
+    body{ font-family:'Inter',system-ui,Segoe UI,sans-serif; }
+    .fade-in{ animation:fadein .25s ease; }
+    @keyframes fadein{ from{opacity:.0;transform:translateY(4px)} to{opacity:1;transform:none} }
+    .btn{ @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold; }
+    .btn-primary{ background:var(--brand); color:#fff; }
+    .btn-outline{ border:2px solid #fff; color:#fff; }
+    .card{ @apply bg-white rounded-2xl shadow p-5; }
+    .chip{ @apply px-2 py-1 rounded-md text-xs font-semibold; }
+    .chip-pending{ @apply bg-yellow-100 text-yellow-800; }
+    .chip-approved{ @apply bg-green-100 text-green-800; }
+    .chip-rejected{ @apply bg-red-100 text-red-800; }
+    .priority-high{ border-left:4px solid #ef4444 }
+    .priority-medium{ border-left:4px solid #f59e0b }
+    .priority-low{ border-left:4px solid #10b981 }
+    .navlink{ @apply hover:text-blue-200 transition; }
+    .grid-3{ display:grid; grid-template-columns:repeat(1,minmax(0,1fr)); gap:1rem }
+    @media(min-width:768px){ .grid-3{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    .kpi{ @apply card flex items-center justify-between; }
+    .kpi i{ @apply text-2xl; color:var(--brand) }
+    .tbl{ @apply w-full text-sm; }
+    .tbl th{ @apply text-left bg-gray-50 p-2 font-semibold; }
+    .tbl td{ @apply p-2 border-t; }
+    .field{ @apply w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400; }
+    #map{ height: 480px; border-radius: 1rem; }
+    .note{ @apply text-xs text-gray-500; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <!-- App Root -->
+  <div id="app" class="min-h-screen flex flex-col"></div>
+
+<script>
+// ======= STATE =======
+const LS = {
+  users: 'td_users',
+  aidRequests: 'td_aid_requests',
+  inventory: 'td_inventory',
+  packages: 'td_packages',
+  donations: 'td_donations',
+  session: 'td_session',
+};
+
+const initial = {
+  users: [
+    // Demo admin
+    { id: uid(), name:'Super Admin', nid:'A-000', age:30, usertype:'admin', district:'Dhaka', password:'admin' },
+  ],
+  inventory: [
+    { id: uid(), name:'Rice', unit:'kg', quantity:1000 },
+    { id: uid(), name:'Lentils', unit:'kg', quantity:600 },
+    { id: uid(), name:'Blanket', unit:'pcs', quantity:400 },
+    { id: uid(), name:'Water', unit:'liter', quantity:1500 },
+    { id: uid(), name:'Medicine', unit:'pack', quantity:300 },
+  ],
+  packages: [
+    { id: uid(), name:'Emergency Pack', description:'For immediate relief', items:[
+      { name:'Rice', quantity:10, unit:'kg' },
+      { name:'Water', quantity:20, unit:'liter' },
+      { name:'Medicine', quantity:1, unit:'pack' },
+    ]},
+    { id: uid(), name:'Winter Pack', description:'For winter season', items:[
+      { name:'Blanket', quantity:2, unit:'pcs' },
+      { name:'Rice', quantity:5, unit:'kg' },
+    ]},
+    { id: uid(), name:'Flood Relief Pack', description:'For flood victims', items:[
+      { name:'Water', quantity:30, unit:'liter' },
+      { name:'Rice', quantity:8, unit:'kg' },
+      { name:'Medicine', quantity:2, unit:'pack' },
+    ]},
+  ],
+  donations: [
+    { id: uid(), donor:'Anonymous Donor', amount: 5000, date: today() },
+  ],
+  aidRequests: [],
+  session: null,
+};
+
+// District coordinates (subset; add more later as needed)
+const DISTRICT_COORDS = {
+  'Dhaka': [23.7806, 90.4070],
+  'Chittagong': [22.3569, 91.7832],
+  'Sylhet': [24.8949, 91.8687],
+  'Rajshahi': [24.3636, 88.6241],
+  'Khulna': [22.8456, 89.5403],
+  'Barisal': [22.7010, 90.3535],
+  'Rangpur': [25.7439, 89.2752],
+  'Mymensingh': [24.7471, 90.4203],
+  'Comilla': [23.4607, 91.1809],
+  'Cox\'s Bazar': [21.4272, 92.0058],
+  'Faridpur': [23.6070, 89.8420],
+  'Gazipur': [24.0023, 90.4269],
+  'Narayanganj': [23.6238, 90.5000],
+  'Noakhali': [22.8696, 91.0995],
+  'Dinajpur': [25.6270, 88.6332],
+  'Jessore': [23.1634, 89.2187],
+  'Pabna': [24.0000, 89.2400],
+  'Bogra': [24.8465, 89.3773],
+  'Madaripur': [23.1641, 90.1893],
+  'Munshiganj': [23.5435, 90.5113],
+};
+
+// ======= STORAGE HELPERS =======
+function uid(){ return Math.random().toString(36).slice(2,9) }
+function today(){ return new Date().toISOString().slice(0,10) }
+function load(key, fallback){ try{ const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback }catch{ return fallback } }
+function save(key, value){ localStorage.setItem(key, JSON.stringify(value)) }
+
+let state = {
+  users: load(LS.users, initial.users),
+  inventory: load(LS.inventory, initial.inventory),
+  packages: load(LS.packages, initial.packages),
+  donations: load(LS.donations, initial.donations),
+  aidRequests: load(LS.aidRequests, initial.aidRequests),
+  session: load(LS.session, initial.session),
+  route: location.hash.replace('#','') || 'home'
+};
+
+function persist(){
+  save(LS.users, state.users);
+  save(LS.inventory, state.inventory);
+  save(LS.packages, state.packages);
+  save(LS.donations, state.donations);
+  save(LS.aidRequests, state.aidRequests);
+  save(LS.session, state.session);
+}
+
+// ======= BUSINESS LOGIC =======
+const TYPE_WEIGHT = { elderly:50, disabled:40, needy:30, general:0 };
+function calcPriority(user){
+  const base = Math.min(Number(user.age||0), 80);
+  let type = 0;
+  if(user.usertype==='needy') type = TYPE_WEIGHT.needy;
+  if(user.usertype==='elderly') type = TYPE_WEIGHT.elderly;
+  if(user.usertype==='disabled') type = TYPE_WEIGHT.disabled;
+  return base + type;
+}
+
+function currentUser(){ return state.session ? state.users.find(u=>u.id===state.session.userId) : null }
+function requireRole(...roles){ const u=currentUser(); return u && roles.includes(u.usertype) }
+
+function registerUser(data){
+  // Unique by NID
+  if(state.users.some(u=>u.nid===data.nid)) throw new Error('An account with this NID already exists');
+  const user = { id:uid(), ...data };
+  state.users.push(user);
+  persist();
+  return user;
+}
+
+function auth(nid, password){
+  const u = state.users.find(x=>x.nid===nid && x.password===password);
+  if(!u) throw new Error('NID or password is incorrect');
+  state.session = { userId: u.id, at: Date.now() };
+  persist();
+  return u;
+}
+
+function logout(){ state.session=null; persist(); render(); }
+
+function submitAidRequest({packageId, reason}){
+  const u = currentUser();
+  if(!u) throw new Error('Login required');
+  const pkg = state.packages.find(p=>p.id===packageId);
+  if(!pkg) throw new Error('Package not found');
+  const req = { id:uid(), userId:u.id, packageId, reason, createdAt:Date.now(), status:'pending' };
+  state.aidRequests.push(req);
+  persist();
+  return req;
+}
+
+function setRequestStatus(id, status){
+  const req = state.aidRequests.find(r=>r.id===id);
+  if(!req) throw new Error('Request not found');
+  if(status==='approved'){
+    // Deduct inventory
+    const pkg = state.packages.find(p=>p.id===req.packageId);
+    for(const item of pkg.items){
+      const inv = state.inventory.find(i=>i.name===item.name && i.unit===item.unit);
+      if(!inv || inv.quantity < item.quantity){
+        throw new Error(`Insufficient ${item.name} in inventory`);
+      }
+    }
+    for(const item of pkg.items){
+      const inv = state.inventory.find(i=>i.name===item.name && i.unit===item.unit);
+      inv.quantity -= item.quantity;
+    }
+  }
+  req.status = status; // pending|approved|rejected
+  persist();
+}
+
+function addInventory({name, unit, quantity}){
+  const existing = state.inventory.find(i=>i.name===name && i.unit===unit);
+  if(existing) existing.quantity += quantity; else state.inventory.push({id:uid(), name, unit, quantity});
+  persist();
+}
+
+function definePackage(pkg){
+  if(!pkg.id) pkg.id = uid();
+  state.packages.push(pkg); persist();
+}
+
+function donate({donor, amount}){
+  state.donations.push({ id:uid(), donor, amount:Number(amount||0), date: today() });
+  persist();
+}
+
+// ======= UI HELPERS =======
+function go(route){ state.route=route; location.hash = route; render(); }
+function toast(msg,type='info'){
+  const el = document.createElement('div');
+  el.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white z-50 fade-in ${type==='success'?'bg-green-600':type==='error'?'bg-red-600':'bg-blue-600'}`;
+  el.textContent = msg; document.body.appendChild(el); setTimeout(()=>el.remove(),2500);
+}
+
+// ======= VIEWS =======
+function Header(){
+  const u = currentUser();
+  return `
+  <header class="bg-blue-800 text-white">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2"><i class="fa-solid fa-hand-holding-heart text-2xl"></i><span class="font-bold text-xl">অনুকূূল</span></div>
+      <nav class="hidden md:flex gap-6 items-center">
+        <button class="navlink ${navSel('home')}" onclick="go('home')">Home</button>
+        <button class="navlink ${navSel('about')}" onclick="go('about')">About Us</button>
+        <button class="navlink ${navSel('packages')}" onclick="go('packages')">Aid Packages</button>
+        <button class="navlink ${navSel('map')}" onclick="go('map')">Volunteer Map</button>
+        <button class="navlink ${navSel('contact')}" onclick="go('contact')">Contact</button>
+        ${u && u.usertype==='admin' ? `<button class="navlink ${navSel('admin')}" onclick="go('admin')">Admin Panel</button>`:''}
+        ${u && u.usertype==='volunteer' ? `<button class="navlink ${navSel('vol')}" onclick="go('vol')">Volunteer</button>`:''}
+        ${u && u.usertype==='donor' ? `<button class="navlink ${navSel('donate')}" onclick="go('donate')">Donate</button>`:''}
+        ${u && u.usertype==='needy' ? `<button class="navlink ${navSel('request')}" onclick="go('request')">Request Aid</button>`:''}
+      </nav>
+      <div class="flex items-center gap-3">
+        ${u? `<span class="hidden sm:inline">${u.name}</span><button class="btn bg-white text-blue-800" onclick="logout()">Logout</button>`
+           : `<button class="btn bg-white text-blue-800" onclick="go('login')">Login</button><button class="btn btn-primary" onclick="go('register')">Register</button>`}
+      </div>
+    </div>
+  </header>`
+}
+function navSel(r){ return state.route===r?'underline font-semibold':'' }
+
+function Footer(){
+  return `<footer class="bg-gray-900 text-white mt-auto">
+    <div class="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-3 gap-8">
+      <div>
+        <h3 class="text-xl font-bold">অনুকূূল</h3>
+        <p class="text-sm mt-2">Delivering aid with transparency and fairness.</p>
+      </div>
+      <div>
+        <h4 class="font-semibold mb-2">Quick Links</h4>
+        <div class="flex flex-col gap-1 text-sm">
+          <button onclick="go('home')" class="text-left hover:text-blue-300">Home</button>
+          <button onclick="go('about')" class="text-left hover:text-blue-300">About Us</button>
+          <button onclick="go('packages')" class="text-left hover:text-blue-300">Aid Packages</button>
+          <button onclick="go('contact')" class="text-left hover:text-blue-300">Contact</button>
+        </div>
+      </div>
+      <div>
+        <h4 class="font-semibold mb-2">Contact</h4>
+        <p class="text-sm"><i class="fa-solid fa-location-dot mr-1"></i> Dhaka, Bangladesh</p>
+        <p class="text-sm"><i class="fa-solid fa-phone mr-1"></i> +880 1712-345678</p>
+        <p class="text-sm"><i class="fa-solid fa-envelope mr-1"></i> info@onukul.org</p>
+      </div>
+    </div>
+    <div class="text-center text-xs py-3 bg-gray-800">&copy; ${new Date().getFullYear()} অনুকূূল. All rights reserved.</div>
+  </footer>`
+}
+
+function Home(){
+  const helped = state.aidRequests.filter(r=>r.status==='approved').length;
+  const packages = state.packages.length;
+  const vols = state.users.filter(u=>u.usertype==='volunteer').length;
+  return `<section class="fade-in">
+    <div class="bg-blue-700 text-white">
+      <div class="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold mb-3">অনুকূূল : সবার জন্যে</h1>
+        <p class="text-lg opacity-90 max-w-2xl mx-auto">একটি দুর্নীতিমুক্ত, স্বচ্ছ এবং ন্যায্য মানবিক সাহায্য বিতরণ প্ল্যাটফর্ম।</p>
+        <div class="mt-8 flex gap-3 justify-center flex-wrap">
+          <button class="btn bg-white text-blue-700" onclick="go('register')">Register</button>
+          <button class="btn btn-outline" onclick="go('about')">Learn More</button>
+          <button class="btn bg-green-500 text-white" onclick="go('donate')">Donate</button>
+        </div>
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto px-4 -mt-8 relative z-10">
+      <div class="grid-3">
+        <div class="kpi"><div><p class="text-gray-500 text-sm">People Helped</p><div class="text-3xl font-bold">${helped}</div></div><i class="fa-solid fa-people-carry-box"></i></div>
+        <div class="kpi"><div><p class="text-gray-500 text-sm">Packages</p><div class="text-3xl font-bold">${packages}</div></div><i class="fa-solid fa-boxes-stacked"></i></div>
+        <div class="kpi"><div><p class="text-gray-500 text-sm">Volunteers</p><div class="text-3xl font-bold">${vols}</div></div><i class="fa-solid fa-user-nurse"></i></div>
+      </div>
+    </div>
+  </section>`
+}
+
+function About(){
+  return `<div class="max-w-3xl mx-auto px-4 py-10 fade-in">
+    <h2 class="text-3xl font-bold mb-4">Our Goal</h2>
+    <p class="text-gray-700">We use data-driven prioritization, real-time inventory, and transparent approval processes to deliver aid fairly to everyone.</p>
+    <ul class="list-disc ml-6 mt-6 space-y-2 text-gray-700">
+      <li>One user = One NID (no duplicates)</li>
+      <li>Priority for elderly/disabled/extremely poor (age + usertype)</li>
+      <li>Package-based aid, automatically deducted from inventory when approved</li>
+      <li>District-wise volunteer visualization</li>
+    </ul>
+  </div>`
+}
+
+function Register(){
+  return `<div class="max-w-xl mx-auto px-4 py-10 fade-in card">
+    <h2 class="text-2xl font-bold mb-4">Register</h2>
+    <form onsubmit="onRegister(event)" class="space-y-4">
+      <div>
+        <label class="block mb-1">Full Name</label>
+        <input class="field" name="name" required />
+      </div>
+      <div>
+        <label class="block mb-1">National ID (NID)</label>
+        <input class="field" name="nid" required />
+        <p class="note">NID must be unique to avoid duplicate entries.</p>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block mb-1">Age</label>
+          <input type="number" min="1" max="120" class="field" name="age" required />
+        </div>
+        <div>
+          <label class="block mb-1">User Type</label>
+          <select class="field" name="usertype" onchange="toggleDistrict(this)">
+            <option value="needy">Aid Seeker</option>
+            <option value="donor">Donor</option>
+            <option value="volunteer">Volunteer</option>
+          </select>
+        </div>
+      </div>
+      <div id="districtWrap" class="hidden">
+        <label class="block mb-1">District (for volunteers)</label>
+        ${districtSelect('district')}
+      </div>
+      <div>
+        <label class="block mb-1">Password</label>
+        <input type="password" class="field" name="password" required />
+      </div>
+      <button class="btn btn-primary w-full">Register</button>
+      <p class="text-sm text-center">Already have an account? <button type="button" class="text-blue-600" onclick="go('login')">Login</button></p>
+    </form>
+  </div>`
+}
+
+function Login(){
+  return `<div class="max-w-md mx-auto px-4 py-10 fade-in card">
+    <h2 class="text-2xl font-bold mb-4">Login</h2>
+    <form onsubmit="onLogin(event)" class="space-y-4">
+      <div>
+        <label class="block mb-1">NID</label>
+        <input class="field" name="nid" required />
+      </div>
+      <div>
+        <label class="block mb-1">Password</label>
+        <input type="password" class="field" name="password" required />
+      </div>
+      <button class="btn btn-primary w-full">Login</button>
+      <p class="text-sm text-center">New user? <button type="button" class="text-blue-600" onclick="go('register')">Register</button></p>
+    </form>
+  </div>`
+}
+
+function RequestAid(){
+  const u = currentUser(); if(!u) return mustLogin(); if(u.usertype!=='needy') return deny('Only aid seekers can apply for assistance');
+  return `<div class="max-w-4xl mx-auto px-4 py-10 fade-in">
+    <h2 class="text-2xl font-bold mb-4">Apply for Assistance</h2>
+    <form onsubmit="onAidRequest(event)" class="space-y-6 card">
+      <div>
+        <label class="block mb-2">Select a Package</label>
+        <div class="grid md:grid-cols-3 gap-4">
+          ${state.packages.map(p=>`
+            <label class="border rounded-xl p-3 cursor-pointer hover:border-blue-400 flex flex-col gap-1">
+              <input type="radio" name="packageId" value="${p.id}" required>
+              <span class="font-semibold">${p.name}</span>
+              <span class="text-xs text-gray-500">${p.description}</span>
+              <ul class="text-xs list-disc ml-4 text-gray-600">${p.items.map(i=>`<li>${i.quantity} ${i.unit} ${i.name}</li>`).join('')}</ul>
+            </label>`).join('')}
+        </div>
+      </div>
+      <div>
+        <label class="block mb-1">Why you need assistance (details)</label>
+        <textarea class="field" name="reason" rows="3" required></textarea>
+      </div>
+      <button class="btn btn-primary">Submit Application</button>
+    </form>
+
+    <div class="mt-8 card">
+      <h3 class="font-bold mb-3">Your Application Status</h3>
+      ${myRequestsTable(u.id)}
+    </div>
+  </div>`
+}
+
+function Donate(){
+  const u = currentUser(); if(!u || u.usertype!=='donor') return deny('Only donors can donate here');
+  const total = state.donations.reduce((s,d)=>s+d.amount,0);
+  return `<div class="max-w-3xl mx-auto px-4 py-10 fade-in">
+    <div class="card">
+      <h2 class="text-2xl font-bold mb-2">Donate</h2>
+      <p class="text-sm text-gray-600">Your support can change lives.</p>
+      <form onsubmit="onDonate(event)" class="mt-4 grid md:grid-cols-3 gap-3">
+        <input class="field md:col-span-1" name="donor" placeholder="Your Name" required />
+        <input class="field md:col-span-1" name="amount" type="number" min="1" placeholder="Amount" required />
+        <button class="btn btn-primary md:col-span-1">Add Donation</button>
+      </form>
+      <p class="text-sm mt-3">Total donations: <b>${total}</b> Taka</p>
+      <table class="tbl mt-4"><thead><tr><th>Donor</th><th>Amount</th><th>Date</th></tr></thead>
+        <tbody>${state.donations.slice().reverse().map(d=>`<tr><td>${d.donor}</td><td>${d.amount}</td><td>${d.date}</td></tr>`).join('')}</tbody></table>
+    </div>
+  </div>`
+}
+
+function VolunteerPanel(){
+  const u = currentUser(); if(!u || u.usertype!=='volunteer') return deny('For volunteers only');
+  const pending = state.aidRequests.filter(r=>r.status==='pending');
+  return `<div class="max-w-6xl mx-auto px-4 py-10 fade-in">
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="card md:col-span-2">
+        <h3 class="font-bold mb-2">Pending Applications (Be Informed)</h3>
+        ${requestsTable(pending)}
+      </div>
+      <div class="card">
+        <h3 class="font-bold mb-2">My Profile</h3>
+        <p>Name: ${u.name}</p>
+        <p>District: ${u.district || '-'}</p>
+        <p>Role: Volunteer</p>
+      </div>
+    </div>
+  </div>`
+}
+
+function Admin(){
+  const u=currentUser(); if(!u || u.usertype!=='admin') return deny('Admin permission required');
+  const stats = {
+    totalReq: state.aidRequests.length,
+    pending: state.aidRequests.filter(r=>r.status==='pending').length,
+    approved: state.aidRequests.filter(r=>r.status==='approved').length,
+    invItems: state.inventory.length,
+  };
+  return `<div class="max-w-7xl mx-auto px-4 py-10 fade-in space-y-6">
+    <div class="grid-3">
+      <div class="kpi"><div><p class="text-gray-500 text-sm">Total Applications</p><div class="text-3xl font-bold">${stats.totalReq}</div></div><i class="fa-solid fa-clipboard-list"></i></div>
+      <div class="kpi"><div><p class="text-gray-500 text-sm">Pending</p><div class="text-3xl font-bold">${stats.pending}</div></div><i class="fa-solid fa-hourglass-half"></i></div>
+      <div class="kpi"><div><p class="text-gray-500 text-sm">Approved</p><div class="text-3xl font-bold">${stats.approved}</div></div><i class="fa-solid fa-circle-check"></i></div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="card md:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold">Manage Applications</h3>
+          <div class="text-sm text-gray-500">Priority = Age + User Type Weight</div>
+        </div>
+        ${requestsTable(state.aidRequests.slice().sort((a,b)=>priorityOf(b)-priorityOf(a)))}
+      </div>
+      <div class="card">
+        <h3 class="font-bold mb-2">Inventory</h3>
+        ${inventoryTable()}
+        <form onsubmit="onAddInventory(event)" class="mt-3 grid grid-cols-4 gap-2">
+          <input class="field col-span-2" name="name" placeholder="Item" required />
+          <input class="field" name="unit" placeholder="Unit" required />
+          <input class="field" name="quantity" type="number" min="1" placeholder="Quantity" required />
+          <button class="btn btn-primary col-span-4">Add Stock</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <div class="card">
+        <h3 class="font-bold mb-3">Packages</h3>
+        ${packagesList()}
+        <details class="mt-3">
+          <summary class="cursor-pointer font-semibold">Add New Package</summary>
+          <form onsubmit="onAddPackage(event)" class="mt-3 space-y-2">
+            <input class="field" name="name" placeholder="Package Name" required />
+            <input class="field" name="description" placeholder="Description" required />
+            <textarea class="field" name="items" rows="3" placeholder="Items (one per line: name,quantity,unit)&#10;Example: Rice,5,kg" required></textarea>
+            <button class="btn btn-primary">Add Package</button>
+          </form>
+        </details>
+      </div>
+      <div class="card">
+        <h3 class="font-bold mb-3">Volunteers by District</h3>
+        <canvas id="volChart" height="240"></canvas>
+      </div>
+    </div>
+  </div>`
+}
+
+function Packages(){
+  return `<div class="max-w-6xl mx-auto px-4 py-10 fade-in">
+    <h2 class="text-2xl font-bold mb-4">Aid Packages</h2>
+    <div class="grid md:grid-cols-3 gap-4">
+      ${state.packages.map(p=>`
+        <div class="card">
+          <h3 class="font-semibold">${p.name}</h3>
+          <p class="text-sm text-gray-600">${p.description}</p>
+          <ul class="mt-2 text-sm list-disc ml-5 text-gray-700">${p.items.map(i=>`<li>${i.quantity} ${i.unit} ${i.name}</li>`).join('')}</ul>
+        </div>`).join('')}
+    </div>
+  </div>`
+}
+
+function Contact(){
+  return `<div class="max-w-xl mx-auto px-4 py-10 fade-in card">
+    <h2 class="text-2xl font-bold mb-2">Contact Us</h2>
+    <p class="text-gray-600 text-sm">Send questions/suggestions.</p>
+    <form onsubmit="event.preventDefault(); toast('Message sent','success')" class="space-y-3 mt-4">
+      <input class="field" placeholder="Your Name" required />
+      <input class="field" placeholder="Email" required />
+      <textarea class="field" rows="4" placeholder="Message" required></textarea>
+      <button class="btn btn-primary">Send</button>
+    </form>
+  </div>`
+}
+
+function MapView(){
+  const counts = volunteersByDistrict();
+  return `<div class="max-w-7xl mx-auto px-4 py-10 fade-in">
+    <h2 class="text-2xl font-bold mb-4">Volunteer Map (Bangladesh)</h2>
+    <div id="map" class="card p-0"></div>
+    <p class="note mt-2">Circle size = Number of volunteers in the district.</p>
+    <div class="card mt-4">
+      <h3 class="font-semibold mb-2">District-wise List</h3>
+      <table class="tbl"><thead><tr><th>District</th><th>Volunteers</th></tr></thead>
+      <tbody>${Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([d,c])=>`<tr><td>${d}</td><td>${c}</td></tr>`).join('')}</tbody></table>
+    </div>
+  </div>`
+}
+
+// ======= PARTIALS =======
+function myRequestsTable(userId){
+  const rows = state.aidRequests.filter(r=>r.userId===userId).slice().reverse().map(r=>{
+    const pkg = state.packages.find(p=>p.id===r.packageId); const u = state.users.find(x=>x.id===r.userId);
+    return `<tr>
+      <td>${u?.name||'-'}</td>
+      <td>${pkg?.name||'-'}</td>
+      <td>${new Date(r.createdAt).toLocaleString()}</td>
+      <td>${statusChip(r.status)}</td>
+    </tr>`
+  }).join('');
+  return `<table class="tbl"><thead><tr><th>User</th><th>Package</th><th>Date</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No applications</td></tr>'}</tbody></table>`
+}
+
+function requestsTable(list){
+  const rows = list.map(r=>{
+    const u = state.users.find(x=>x.id===r.userId);
+    const pkg = state.packages.find(p=>p.id===r.packageId);
+    const pr = priorityOf(r);
+    const prClass = pr>=100?'priority-high':pr>=60?'priority-medium':'priority-low';
+    return `<tr class="${prClass}">
+      <td>${u?.name||'-'}<div class="text-xs text-gray-500">${u?.nid||''}</div></td>
+      <td>${pkg?.name||'-'}</td>
+      <td>${new Date(r.createdAt).toLocaleString()}</td>
+      <td>${statusChip(r.status)}</td>
+      <td>${pr}</td>
+      <td class="space-x-1">
+        <button class="chip chip-approved" onclick="onSetStatus('${r.id}','approved')">Approve</button>
+        <button class="chip chip-pending" onclick="onSetStatus('${r.id}','pending')">Wait</button>
+        <button class="chip chip-rejected" onclick="onSetStatus('${r.id}','rejected')">Reject</button>
+      </td>
+    </tr>`
+  }).join('');
+  return `<table class="tbl"><thead><tr><th>Name</th><th>Package</th><th>Applied</th><th>Status</th><th>Priority</th><th>Action</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No applications</td></tr>'}</tbody></table>`
+}
+
+function inventoryTable(){
+  return `<table class="tbl"><thead><tr><th>Item</th><th>Quantity</th></tr></thead>
+    <tbody>${state.inventory.map(i=>`<tr><td>${i.name}</td><td>${i.quantity} ${i.unit}</td></tr>`).join('')}</tbody></table>`
+}
+
+function packagesList(){
+  return `<div class="space-y-2">${state.packages.map(p=>`
+    <div class="border rounded-lg p-2 text-sm">
+      <div class="font-semibold">${p.name}</div>
+      <div class="text-xs text-gray-600">${p.description}</div>
+      <ul class="text-xs list-disc ml-4">${p.items.map(i=>`<li>${i.quantity} ${i.unit} ${i.name}</li>`).join('')}</ul>
+    </div>`).join('')}</div>`
+}
+
+function statusChip(s){ return `<span class="chip ${s==='pending'?'chip-pending':s==='approved'?'chip-approved':'chip-rejected'}">${s}</span>` }
+function priorityOf(r){ const u=state.users.find(x=>x.id===r.userId); return u?calcPriority(u):0; }
+function deny(msg){ return `<div class="max-w-xl mx-auto px-4 py-10 fade-in"><div class="card text-center"><h2 class="text-xl font-bold text-red-600">Access Denied</h2><p>${msg}</p></div></div>` }
+function mustLogin(){ return `<div class="max-w-xl mx-auto px-4 py-10 fade-in"><div class="card text-center"><h2 class="text-xl font-bold">Login Required</h2><p>Please <button class="text-blue-600" onclick="go('login')">login</button> to access this page.</p></div></div>` }
+
+function districtSelect(name){
+  const districts = Object.keys(DISTRICT_COORDS).sort();
+  return `<select class="field" name="${name}">${districts.map(d=>`<option value="${d}">${d}</option>`).join('')}</select>`
+}
+
+function volunteersByDistrict(){
+  const vols = state.users.filter(u=>u.usertype==='volunteer');
+  const counts = {};
+  for(const v of vols){
+    const d = v.district;
+    if(d) counts[d] = (counts[d]||0)+1;
+  }
+  return counts;
+}
+
+// ======= EVENT HANDLERS =======
+function onRegister(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    const user = registerUser({
+      name: data.get('name'),
+      nid: data.get('nid'),
+      age: Number(data.get('age')),
+      usertype: data.get('usertype'),
+      district: data.get('usertype')==='volunteer'?data.get('district'):null,
+      password: data.get('password'),
+    });
+    state.session = { userId: user.id, at: Date.now() };
+    persist();
+    toast('Registration successful','success');
+    go(user.usertype==='needy'?'request':user.usertype==='volunteer'?'vol':user.usertype==='donor'?'donate':'home');
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onLogin(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    const u = auth(data.get('nid'), data.get('password'));
+    toast(`Welcome ${u.name}`,'success');
+    go(u.usertype==='needy'?'request':u.usertype==='volunteer'?'vol':u.usertype==='donor'?'donate':u.usertype==='admin'?'admin':'home');
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onAidRequest(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    const req = submitAidRequest({ packageId: data.get('packageId'), reason: data.get('reason') });
+    toast('Application submitted','success');
+    e.target.reset();
+    render();
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onSetStatus(id, status){
+  try {
+    setRequestStatus(id, status);
+    toast(`Request ${status}`,'success');
+    render();
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onAddInventory(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    addInventory({
+      name: data.get('name'),
+      unit: data.get('unit'),
+      quantity: Number(data.get('quantity')),
+    });
+    toast('Inventory updated','success');
+    e.target.reset();
+    render();
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onAddPackage(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    const items = data.get('items').split('\n').filter(Boolean).map(line=>{
+      const [name,quantity,unit] = line.split(',').map(x=>x.trim());
+      return { name, quantity: Number(quantity), unit };
+    });
+    definePackage({ name: data.get('name'), description: data.get('description'), items });
+    toast('Package added','success');
+    e.target.reset();
+    render();
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function onDonate(e){
+  e.preventDefault();
+  const data = new FormData(e.target);
+  try {
+    donate({ donor: data.get('donor'), amount: data.get('amount') });
+    toast('Thank you for your donation!','success');
+    e.target.reset();
+    render();
+  } catch(err) { toast(err.message, 'error') }
+}
+
+function toggleDistrict(sel){
+  document.getElementById('districtWrap').style.display = sel.value==='volunteer'?'block':'none';
+}
+
+// ======= RENDER =======
+function render(){
+  const u = currentUser();
+  const view = {
+    home: Home,
+    about: About,
+    register: Register,
+    login: Login,
+    request: RequestAid,
+    donate: Donate,
+    vol: VolunteerPanel,
+    admin: Admin,
+    packages: Packages,
+    contact: Contact,
+    map: MapView,
+  }[state.route] || Home;
+
+  document.getElementById('app').innerHTML = `${Header()}${view()}${Footer()}`;
+
+  // Post-render effects
+  if(state.route==='admin' && u?.usertype==='admin') renderVolChart();
+  if(state.route==='map') renderMap();
+}
+
+function renderVolChart(){
+  const counts = volunteersByDistrict();
+  const ctx = document.getElementById('volChart')?.getContext('2d');
+  if(!ctx) return;
+  const labels = Object.keys(counts);
+  const data = Object.values(counts);
+  new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Volunteers', data, backgroundColor: '#0ea5e9' }] },
+    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+function renderMap(){
+  const counts = volunteersByDistrict();
+  const map = L.map('map').setView([23.6850, 90.3563], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  for(const [district, count] of Object.entries(counts)){
+    const coords = DISTRICT_COORDS[district];
+    if(coords) L.circleMarker(coords, { radius: Math.min(10+count*2,30), fillColor: '#0ea5e9', color: '#000', weight: 1, opacity: 1, fillOpacity: 0.8 })
+      .addTo(map).bindPopup(`<b>${district}</b><br>Volunteers: ${count}`);
+  }
+}
+
+// ======= INIT =======
+window.addEventListener('hashchange', ()=>go(location.hash.replace('#','')));
+window.addEventListener('load', render);
+window.onRegister = onRegister;
+window.onLogin = onLogin;
+window.onAidRequest = onAidRequest;
+window.onSetStatus = onSetStatus;
+window.onAddInventory = onAddInventory;
+window.onAddPackage = onAddPackage;
+window.onDonate = onDonate;
+window.toggleDistrict = toggleDistrict;
+window.go = go;
+window.logout = logout;
+</script>
+</body>
+</html>

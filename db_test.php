@@ -5,7 +5,7 @@ header('Content-Type: application/json');
 $host = 'localhost';
 $db   = 'onukul';
 $user = 'root';
-$pass = '';
+$pass = 'Onukul@123';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";

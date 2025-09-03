@@ -31,9 +31,21 @@ CREATE TABLE `aid_item` (
   `item_id` int(11) NOT NULL,
   `item_type` varchar(9) NOT NULL,
   `item_name` varchar(22) NOT NULL,
-  `item_unit` int(11) NOT NULL,
+  `item_unit` varchar(10) NOT NULL,
+  `quantity` int(11) NOT NULL DEFAULT 0,
   `last_updated` date NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `aid_item`
+--
+
+INSERT INTO `aid_item` (`item_id`, `item_type`, `item_name`, `item_unit`, `quantity`, `last_updated`) VALUES
+(1, 'food', 'Rice', 'kg', 1000, '2024-04-01'),
+(2, 'food', 'Lentils', 'kg', 600, '2024-04-01'),
+(3, 'clothing', 'Blanket', 'pcs', 400, '2024-04-01'),
+(4, 'food', 'Water', 'liter', 1500, '2024-04-01'),
+(5, 'medical', 'Medicine', 'pack', 300, '2024-04-01');
 
 -- --------------------------------------------------------
 
@@ -45,24 +57,26 @@ CREATE TABLE `aid_request` (
   `request_id` int(11) NOT NULL,
   `request_date` date NOT NULL,
   `request_status` varchar(9) NOT NULL,
-  `user_id` int(11) NOT NULL
+  `user_id` int(11) NOT NULL,
+  `package_id` varchar(10) DEFAULT NULL,
+  `reason` text
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
 -- Dumping data for table `aid_request`
 --
 
-INSERT INTO `aid_request` (`request_id`, `request_date`, `request_status`, `user_id`) VALUES
-(1, '2024-04-02', 'pending', 1),
-(2, '2024-04-05', 'approved', 2),
-(3, '2024-04-06', 'rejected', 3),
-(4, '2024-04-08', 'pending', 4),
-(5, '2024-04-12', 'approved', 5),
-(6, '2024-04-15', 'pending', 6),
-(7, '2024-04-18', 'rejected', 7),
-(8, '2024-04-19', 'approved', 8),
-(9, '2024-04-22', 'pending', 9),
-(10, '2024-04-25', 'approved', 10);
+INSERT INTO `aid_request` (`request_id`, `request_date`, `request_status`, `user_id`, `package_id`, `reason`) VALUES
+(1, '2024-04-02', 'pending', 1, 'pkg1', 'Need emergency food support'),
+(2, '2024-04-05', 'approved', 2, 'pkg2', 'Winter clothing required'),
+(3, '2024-04-06', 'rejected', 3, 'pkg1', 'Medical supplies needed'),
+(4, '2024-04-08', 'pending', 4, 'pkg3', 'Flood relief assistance'),
+(5, '2024-04-12', 'approved', 5, 'pkg1', 'Food and water support'),
+(6, '2024-04-15', 'pending', 6, 'pkg2', 'Blankets for family'),
+(7, '2024-04-18', 'rejected', 7, 'pkg1', 'Emergency aid request'),
+(8, '2024-04-19', 'approved', 8, 'pkg3', 'Flood victim support'),
+(9, '2024-04-22', 'pending', 9, 'pkg1', 'Food assistance needed'),
+(10, '2024-04-25', 'approved', 10, 'pkg2', 'Winter relief required');
 
 -- --------------------------------------------------------
 
@@ -119,6 +133,54 @@ INSERT INTO `donation` (`donation_id`, `donation_type`, `donation_date`, `amount
 (8, 'goods', '2024-04-18', 0, 'Mosquito Nets', 8),
 (9, 'money', '2024-04-20', 3500, '', 9),
 (10, 'goods', '2024-04-25', 0, 'Medical Kits', 10);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `packages`
+--
+
+CREATE TABLE `packages` (
+  `id` varchar(10) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `description` varchar(100) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `packages`
+--
+
+INSERT INTO `packages` (`id`, `name`, `description`) VALUES
+('pkg1', 'Emergency Pack', 'For immediate relief'),
+('pkg2', 'Winter Pack', 'For winter season'),
+('pkg3', 'Flood Relief Pack', 'For flood victims');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `package_items`
+--
+
+CREATE TABLE `package_items` (
+  `package_id` varchar(10) NOT NULL,
+  `item_name` varchar(50) NOT NULL,
+  `quantity` int(11) NOT NULL,
+  `unit` varchar(10) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Dumping data for table `package_items`
+--
+
+INSERT INTO `package_items` (`package_id`, `item_name`, `quantity`, `unit`) VALUES
+('pkg1', 'Rice', 10, 'kg'),
+('pkg1', 'Water', 20, 'liter'),
+('pkg1', 'Medicine', 1, 'pack'),
+('pkg2', 'Blanket', 2, 'pcs'),
+('pkg2', 'Rice', 5, 'kg'),
+('pkg3', 'Water', 30, 'liter'),
+('pkg3', 'Rice', 8, 'kg'),
+('pkg3', 'Medicine', 2, 'pack');
 
 -- --------------------------------------------------------
 
@@ -192,6 +254,7 @@ CREATE TABLE `user` (
   `last_name` varchar(9) NOT NULL,
   `age` int(11) NOT NULL,
   `type` varchar(9) NOT NULL,
+  `district` varchar(20) DEFAULT NULL,
   `credit_score` int(11) NOT NULL,
   `is_disabled` tinyint(1) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -200,17 +263,18 @@ CREATE TABLE `user` (
 -- Dumping data for table `user`
 --
 
-INSERT INTO `user` (`user_id`, `nid`, `phone`, `registration_date`, `email`, `password`, `first_name`, `last_name`, `age`, `type`, `credit_score`, `is_disabled`) VALUES
-(1, 1234567890, 1711111111, '2024-01-10', 'ali.k@example.com', 'AliPass12', 'Ali', 'Khan', 28, 'donor', 720, 0),
-(2, 1234567891, 1711111112, '2024-01-15', 'sara.b@example.com', 'SaraPwd9', 'Sara', 'Begum', 25, 'aid', 680, 0),
-(3, 1234567892, 1711111113, '2024-01-20', 'rahim.u@example.com', 'RahimP@ss', 'Rahim', 'Uddin', 35, 'donor', 640, 0),
-(4, 1234567893, 1711111114, '2024-02-01', 'fatema.a@example.com', 'Fatema12', 'Fatema', 'Akther', 31, 'aid', 710, 0),
-(5, 1234567894, 1711111115, '2024-02-05', 'jamil.h@example.com', 'Jamil@45', 'Jamil', 'Hossain', 42, 'donor', 600, 1),
-(6, 1234567895, 1711111116, '2024-02-15', 'maria.a@example.com', 'MariaPwd8', 'Maria', 'Akter', 22, 'aid', 750, 0),
-(7, 1234567896, 1711111117, '2024-03-01', 'kamal.r@example.com', 'Kam@l321', 'Kamal', 'Rahman', 29, 'donor', 670, 0),
-(8, 1234567897, 1711111118, '2024-03-10', 'sumaiya.j@example.com', 'Sumaiya77', 'Sumaiya', 'Jahan', 27, 'aid', 690, 0),
-(9, 1234567898, 1711111119, '2024-03-20', 'abdul.k@example.com', 'Abdul1234', 'Abdul', 'Karim', 39, 'donor', 580, 1),
-(10, 1234567899, 1711111120, '2024-03-25', 'ayesha.s@example.com', 'Ayesha22', 'Ayesha', 'Siddiqi', 33, 'aid', 730, 0);
+INSERT INTO `user` (`user_id`, `nid`, `phone`, `registration_date`, `email`, `password`, `first_name`, `last_name`, `age`, `type`, `district`, `credit_score`, `is_disabled`) VALUES
+(1, 1234567890, 1711111111, '2024-01-10', 'ali.k@example.com', '$2y$10$hashedpassword1', 'Ali', 'Khan', 28, 'donor', NULL, 720, 0),
+(2, 1234567891, 1711111112, '2024-01-15', 'sara.b@example.com', '$2y$10$hashedpassword2', 'Sara', 'Begum', 25, 'needy', NULL, 680, 0),
+(3, 1234567892, 1711111113, '2024-01-20', 'rahim.u@example.com', '$2y$10$hashedpassword3', 'Rahim', 'Uddin', 35, 'donor', NULL, 640, 0),
+(4, 1234567893, 1711111114, '2024-02-01', 'fatema.a@example.com', '$2y$10$hashedpassword4', 'Fatema', 'Akther', 31, 'needy', NULL, 710, 0),
+(5, 1234567894, 1711111115, '2024-02-05', 'jamil.h@example.com', '$2y$10$hashedpassword5', 'Jamil', 'Hossain', 42, 'donor', NULL, 600, 1),
+(6, 1234567895, 1711111116, '2024-02-15', 'maria.a@example.com', '$2y$10$hashedpassword6', 'Maria', 'Akter', 22, 'needy', NULL, 750, 0),
+(7, 1234567896, 1711111117, '2024-03-01', 'kamal.r@example.com', '$2y$10$hashedpassword7', 'Kamal', 'Rahman', 29, 'volunteer', 'Dhaka', 670, 0),
+(8, 1234567897, 1711111118, '2024-03-10', 'sumaiya.j@example.com', '$2y$10$hashedpassword8', 'Sumaiya', 'Jahan', 27, 'needy', NULL, 690, 0),
+(9, 1234567898, 1711111119, '2024-03-20', 'abdul.k@example.com', '$2y$10$hashedpassword9', 'Abdul', 'Karim', 39, 'donor', NULL, 580, 1),
+(10, 1234567899, 1711111120, '2024-03-25', 'ayesha.s@example.com', '$2y$10$hashedpassword10', 'Ayesha', 'Siddiqi', 33, 'needy', NULL, 730, 0),
+(11, 12345678910, 17111111121, '2024-03-30', 'admin@example.com', 'admin', 'Super', 'Admin', 30, 'admin', NULL, 800, 0);
 
 --
 -- Indexes for dumped tables
@@ -266,6 +330,19 @@ ALTER TABLE `requesting_process`
   ADD PRIMARY KEY (`request_id`,`item_id`),
   ADD KEY `request_id` (`request_id`,`item_id`),
   ADD KEY `item_id` (`item_id`);
+
+--
+-- Indexes for table `packages`
+--
+ALTER TABLE `packages`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `package_items`
+--
+ALTER TABLE `package_items`
+  ADD PRIMARY KEY (`package_id`,`item_name`),
+  ADD KEY `package_id` (`package_id`);
 
 --
 -- Indexes for table `story`

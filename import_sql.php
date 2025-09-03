@@ -2,7 +2,7 @@
 // import_sql.php
 $host = 'localhost';
 $user = 'root';
-$pass = '';
+$pass = 'Onukul@123';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;charset=$charset";

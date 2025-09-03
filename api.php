@@ -8,7 +8,7 @@ $action = $_GET['action'] ?? '';
 switch($action) {
     case 'users':
         if($method === 'GET'){
-            $stmt = $pdo->query("SELECT user_id as id, CONCAT(first_name, ' ', last_name) as name, nid, age, type as usertype FROM user");
+            $stmt = $pdo->query("SELECT user_id as id, CONCAT(first_name, ' ', last_name) as name, nid, age, type as usertype, district FROM user");
             echo json_encode($stmt->fetchAll());
         } elseif($method === 'POST'){
             $data = json_decode(file_get_contents('php://input'), true);
@@ -21,7 +21,7 @@ switch($action) {
                 exit;
             }
             
-            $stmt = $pdo->prepare("INSERT INTO user (first_name, last_name, nid, age, type, password, registration_date, email, phone) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)");
+            $stmt = $pdo->prepare("INSERT INTO user (first_name, last_name, nid, age, type, district, password, registration_date, email, phone) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)");
             
             // Split name into first and last name
             $nameParts = explode(' ', $data['name'], 2);
@@ -31,6 +31,7 @@ switch($action) {
             // Generate a default email and phone if not provided
             $email = $data['email'] ?? $data['nid'] . '@example.com';
             $phone = $data['phone'] ?? '0000000000';
+            $district = ($data['usertype'] === 'volunteer') ? $data['district'] : null;
             
             $stmt->execute([
                 $firstName, 
@@ -38,7 +39,8 @@ switch($action) {
                 $data['nid'], 
                 $data['age'], 
                 $data['usertype'], 
-                password_hash($data['password'], PASSWORD_DEFAULT),
+                $district,
+                $data['password'],  // Store as plain text for now
                 $email,
                 $phone
             ]);
@@ -54,10 +56,31 @@ switch($action) {
         break;
 
     case 'packages':
-        // Note: You'll need to create a packages table or modify this query
         if($method==='GET'){
-            // For now, return empty array as packages table doesn't exist in SQL
-            echo json_encode([]);
+            $stmt = $pdo->query("
+                SELECT p.id, p.name, p.description, 
+                GROUP_CONCAT(CONCAT(pi.item_name, ',', pi.quantity, ',', pi.unit) SEPARATOR ';') as items_str
+                FROM packages p 
+                LEFT JOIN package_items pi ON p.id = pi.package_id 
+                GROUP BY p.id
+            ");
+            $packages = [];
+            while($row = $stmt->fetch()) {
+                $items = [];
+                if($row['items_str']) {
+                    foreach(explode(';', $row['items_str']) as $itemStr) {
+                        list($name, $quantity, $unit) = explode(',', $itemStr);
+                        $items[] = ['name' => $name, 'quantity' => (int)$quantity, 'unit' => $unit];
+                    }
+                }
+                $packages[] = [
+                    'id' => $row['id'],
+                    'name' => $row['name'],
+                    'description' => $row['description'],
+                    'items' => $items
+                ];
+            }
+            echo json_encode($packages);
         }
         break;
 
@@ -65,9 +88,23 @@ switch($action) {
         if($method==='GET'){
             $stmt = $pdo->query("
                 SELECT ar.request_id as id, ar.request_date as createdAt, ar.request_status as status, 
+                ar.package_id as packageId, ar.reason, ar.user_id as userId,
                 CONCAT(u.first_name, ' ', u.last_name) as userName, u.user_id as userId
                 FROM aid_request ar 
                 JOIN user u ON ar.user_id = u.user_id
+            ");
+            echo json_encode($stmt->fetchAll());
+        }
+        break;
+
+    case 'donations':
+        if($method==='GET'){
+            $stmt = $pdo->query("
+                SELECT d.donation_id as id, d.donation_date as date, d.amount_given as amount, 
+                d.item_given as item, d.donated_by as donorId,
+                CONCAT(u.first_name, ' ', u.last_name) as donor
+                FROM donation d 
+                JOIN user u ON d.donated_by = u.user_id
             ");
             echo json_encode($stmt->fetchAll());
         }
